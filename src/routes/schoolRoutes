@@ -203,6 +203,7 @@ router.put(
         return res.status(200).json({ passwordChange: true });
       } catch (error) {
         res.status(400);
+
         throw new Error("Could not change password at the moment.");
       }
     }
