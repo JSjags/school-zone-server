@@ -1,0 +1,255 @@
+const express = require("express");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const asyncHandler = require("express-async-handler");
+
+const School = require("../models/schoolModel");
+const createToken = require("../config/jwt");
+const { protect } = require("../middlewares/authMiddleware");
+const { checkEmail, checkInputs } = require("../helpers");
+
+const router = express.Router();
+
+router.get("/", (req, res) => {
+  res.send("Its Working!!!");
+});
+
+// POST Create New School
+// PATH /api/schools/
+// PUBLIC
+router.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const {
+      schoolName,
+      institutionLevel,
+      address,
+      email,
+      phoneNumber,
+      country,
+      currency,
+      password,
+      confirmPassword,
+    } = req.body;
+
+    // check if all required data is present
+
+    if (
+      !schoolName ||
+      !institutionLevel ||
+      !address ||
+      !email ||
+      !phoneNumber ||
+      !country ||
+      !password ||
+      !confirmPassword
+    ) {
+      res.status(400);
+
+      throw new Error("Please fill in all fields");
+    }
+
+    // check if email exists in database
+    checkEmail(email, res);
+
+    // check all inputs
+    checkInputs(req.body);
+
+    // create school
+    try {
+      const school = await School.create({
+        name: schoolName,
+        email,
+        institutionLevel,
+        password,
+        country,
+        address,
+        phoneNumber,
+        currency,
+      });
+
+      if (!school) {
+        res.status(400);
+        throw new Error("User not created");
+      }
+
+      res.status(201).json({
+        id: school._id,
+        token: createToken(school._id),
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error(`Error creating user: ${error}`);
+    }
+  })
+);
+
+// POST sign In To School Account
+// PATH /api/schools/login
+// PUBLIC
+router.post(
+  "/login",
+  asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400);
+
+      throw new Error("Please fill input fields properly.");
+    }
+
+    try {
+      const school = await School.findOne({ email });
+      if (school) {
+        const { password: hashedPassword } = school;
+        const valid = await bcrypt.compare(password, hashedPassword);
+        if (valid) {
+          res.status(200).json({
+            id: school.id,
+            token: createToken(school.id),
+          });
+        } else {
+          res.status(400);
+          throw new Error("Email or password is incorrect");
+        }
+      } else {
+        res.status(404);
+        throw new Error("School not registered");
+      }
+    } catch (error) {
+      res.status(404);
+      throw new Error(error);
+    }
+  })
+);
+
+// GET Single School
+// PATH /api/schools/info
+// PRIVATE
+router.get(
+  "/info",
+  protect,
+  asyncHandler(async (req, res) => {
+    if (!req.schoolId) {
+      res.status(401);
+
+      throw new Error("User not authorized");
+    }
+    try {
+      const schoolInfo = await School.findById(req.schoolId).select(
+        "-password"
+      );
+      const data = { ...schoolInfo };
+      res.status(200).json(data["_doc"]);
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Error fetching data");
+    }
+  })
+);
+
+// GET Single School Students
+// PATH /api/schools/:id/students
+// PRIVATE
+router.get(
+  "/:id/students",
+  protect,
+  asyncHandler(async (req, res) => {
+    let school;
+    const schoolId = req.params.id;
+
+    try {
+      school = await School.findById(schoolId);
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, We encountered an error!!!");
+      }
+
+      res.status(200).json({ students: school.students });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Oops, We encountered an error!!!");
+    }
+  })
+);
+
+// PUT Change School Password
+// PATH /api/schools/change-password
+// PRIVATE
+router.put(
+  "/change-password/:id",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { changePassword, newPassword } = req.body;
+    const schoolId = req.schoolId;
+
+    if (newPassword) {
+      const salt = await bcrypt.genSalt();
+      const password = await bcrypt.hash(newPassword, salt);
+      const passwordUpdate = {
+        password,
+      };
+
+      try {
+        const school = await School.findByIdAndUpdate(schoolId, passwordUpdate);
+        if (!school) {
+          res.status(400);
+          throw new Error("Error changing password.");
+        }
+        return res.status(200).json({ passwordChange: true });
+      } catch (error) {
+        res.status(400);
+        throw new Error("Could not change password at the moment.");
+      }
+    }
+
+    try {
+      const school = await School.findById(schoolId);
+      const { password } = school;
+
+      const isCorrectPassword = await bcrypt.compare(changePassword, password);
+
+      if (!isCorrectPassword)
+        return res
+          .status(200)
+          .json({ message: "Incorrect password", isSuccess: false });
+
+      return res
+        .status(200)
+        .json({ message: "Valid password", isSuccess: true });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Server Error");
+    }
+  })
+);
+
+// PUT Single School Details
+// PATH /api/schools/:schoolId
+// PRIVATE
+router.put(
+  "/:schoolId",
+  protect,
+  asyncHandler(async (req, res) => {
+    let school;
+    const update = req.body;
+    const { schoolId } = req.params;
+
+    try {
+      school = await School.findByIdAndUpdate(schoolId, update);
+      res.status(200).json(school);
+    } catch (error) {
+      res.status(400);
+      throw new Error(
+        "Sorry, we couldn't process your changes at this moment. Please try again later."
+      );
+    }
+  })
+);
+
+module.exports = router;
