@@ -134,11 +134,20 @@ const schoolSchema = new Schema(
   }
 );
 
-schoolSchema.pre("save", async function (next) {
-  const salt = await bcrypt.genSalt();
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
+// schoolSchema.pre("save", async function (next) {
+//   const salt = await bcrypt.genSalt();
+//   this.password = await bcrypt.hash(this.password, salt);
+//   next();
+// });
+// schoolSchema.pre("updateOne", async function (next) {
+//   const docToUpdate = await this.model.findOne(this.getQuery());
+//   console.log(docToUpdate);
+//   next();
+// });
+// schoolSchema.post("updateOne", async function (result, next) {
+//   console.log(result.getChanges);
+//   next();
+// });
 
 const School = mongoose.model("School", schoolSchema);
-module.exports = School;
+module.exports = { School, schoolSchema };

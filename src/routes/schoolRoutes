@@ -3,10 +3,11 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 
-const School = require("../models/schoolModel");
+const { School, schoolSchema } = require("../models/schoolModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
+const { Mongoose } = require("mongoose");
 
 const router = express.Router();
 
@@ -249,6 +250,38 @@ router.put(
       throw new Error(
         "Sorry, we couldn't process your changes at this moment. Please try again later."
       );
+    }
+  })
+);
+
+// PUT Update School Document
+// PAth /api/schools/:schoolId/update
+// PRIVATE
+router.put(
+  "/:schoolId/update",
+  protect,
+  asyncHandler(async (req, res) => {
+    try {
+      const school = await School.findById(req.schoolId);
+      if (!school.templates?.[req.body.templateName]) {
+        schoolSchema.add({ templates: "object" });
+        const response = await School.updateOne(
+          { _id: req.schoolId },
+          { templates: { [req.body.templateName]: req.body.templateData } },
+          { upsert: true }
+        );
+        return res.status(200).json({ message: "successful", response });
+      }
+
+      const response = await School.updateOne(
+        { _id: req.schoolId },
+        { templates: { [req.body.templateName]: req.body.templateData } },
+        { upsert: true }
+      );
+      return res.status(200).json({ message: "successful", response });
+    } catch (error) {
+      res.status(400);
+      throw new Error("It's from here" + error);
     }
   })
 );
