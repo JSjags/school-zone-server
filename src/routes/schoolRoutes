@@ -1,5 +1,4 @@
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 
@@ -7,7 +6,6 @@ const { School, schoolSchema } = require("../models/schoolModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
-const { Mongoose } = require("mongoose");
 
 const router = express.Router();
 
@@ -255,7 +253,7 @@ router.put(
 );
 
 // PUT Update School Document
-// PAth /api/schools/:schoolId/update
+// PATH /api/schools/:schoolId/update
 // PRIVATE
 router.put(
   "/:schoolId/update",
