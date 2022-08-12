@@ -1,4 +1,4 @@
-const School = require("./models/schoolModel");
+const { School } = require("./models/schoolModel");
 const { isEmail, isMobilePhone, isStrongPassword } = require("validator");
 
 // input checkers

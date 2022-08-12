@@ -14,7 +14,11 @@ const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
+// School Routes
 app.use("/api/schools", require("./routes/schoolRoutes"));
+
+// Student Routes
+// app.use("/api/students", require("./routes/studentRoutes"));
 app.use(errorHandler);
 
 mongoose

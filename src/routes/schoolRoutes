@@ -6,121 +6,11 @@ const { School, schoolSchema } = require("../models/schoolModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
+const { response } = require("express");
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  res.send("Its Working!!!");
-});
-
-// POST Create New School
-// PATH /api/schools/
-// PUBLIC
-router.post(
-  "/",
-  asyncHandler(async (req, res) => {
-    const {
-      schoolName,
-      institutionLevel,
-      address,
-      email,
-      phoneNumber,
-      country,
-      currency,
-      password,
-      confirmPassword,
-    } = req.body;
-
-    // check if all required data is present
-
-    if (
-      !schoolName ||
-      !institutionLevel ||
-      !address ||
-      !email ||
-      !phoneNumber ||
-      !country ||
-      !password ||
-      !confirmPassword
-    ) {
-      res.status(400);
-
-      throw new Error("Please fill in all fields");
-    }
-
-    // check if email exists in database
-    checkEmail(email, res);
-
-    // check all inputs
-    checkInputs(req.body);
-
-    // create school
-    try {
-      const school = await School.create({
-        name: schoolName,
-        email,
-        institutionLevel,
-        password,
-        country,
-        address,
-        phoneNumber,
-        currency,
-      });
-
-      if (!school) {
-        res.status(400);
-        throw new Error("User not created");
-      }
-
-      res.status(201).json({
-        id: school._id,
-        token: createToken(school._id),
-      });
-    } catch (error) {
-      res.status(400);
-      throw new Error(`Error creating user: ${error}`);
-    }
-  })
-);
-
-// POST sign In To School Account
-// PATH /api/schools/login
-// PUBLIC
-router.post(
-  "/login",
-  asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      res.status(400);
-
-      throw new Error("Please fill input fields properly.");
-    }
-
-    try {
-      const school = await School.findOne({ email });
-      if (school) {
-        const { password: hashedPassword } = school;
-        const valid = await bcrypt.compare(password, hashedPassword);
-        if (valid) {
-          res.status(200).json({
-            id: school.id,
-            token: createToken(school.id),
-          });
-        } else {
-          res.status(400);
-          throw new Error("Email or password is incorrect");
-        }
-      } else {
-        res.status(404);
-        throw new Error("School not registered");
-      }
-    } catch (error) {
-      res.status(404);
-      throw new Error(error);
-    }
-  })
-);
+//------- GET REQUESTS -------//
 
 // GET Single School
 // PATH /api/schools/info
@@ -175,6 +65,8 @@ router.get(
     }
   })
 );
+
+//------- PUT REQUESTS -------//
 
 // PUT Change School Password
 // PATH /api/schools/change-password
@@ -281,6 +173,149 @@ router.put(
       res.status(400);
       throw new Error("It's from here" + error);
     }
+  })
+);
+
+//------- POST REQUESTS -------//
+
+// POST Create New School
+// PATH /api/schools/
+// PUBLIC
+router.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const {
+      schoolName,
+      institutionLevel,
+      address,
+      email,
+      phoneNumber,
+      country,
+      currency,
+      password,
+      confirmPassword,
+    } = req.body;
+
+    // check if all required data is present
+
+    if (
+      !schoolName ||
+      !institutionLevel ||
+      !address ||
+      !email ||
+      !phoneNumber ||
+      !country ||
+      !password ||
+      !confirmPassword
+    ) {
+      res.status(400);
+
+      throw new Error("Please fill in all fields");
+    }
+
+    // check if email exists in database
+    checkEmail(email, res);
+
+    // check all inputs
+    checkInputs(req.body);
+
+    // create school
+    try {
+      const school = await School.create({
+        name: schoolName,
+        email,
+        institutionLevel,
+        password,
+        country,
+        address,
+        phoneNumber,
+        currency,
+      });
+
+      if (!school) {
+        res.status(400);
+        throw new Error("User not created");
+      }
+
+      res.status(201).json({
+        id: school._id,
+        token: createToken(school._id),
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error(`Error creating user: ${error}`);
+    }
+  })
+);
+
+// POST Sign In To School Account
+// PATH /api/schools/login
+// PUBLIC
+router.post(
+  "/login",
+  asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400);
+
+      throw new Error("Please fill input fields properly.");
+    }
+
+    try {
+      const school = await School.findOne({ email });
+      if (school) {
+        const { password: hashedPassword } = school;
+        const valid = await bcrypt.compare(password, hashedPassword);
+        if (valid) {
+          res.status(200).json({
+            id: school.id,
+            token: createToken(school.id),
+          });
+        } else {
+          res.status(400);
+          throw new Error("Email or password is incorrect");
+        }
+      } else {
+        res.status(404);
+        throw new Error("School not registered");
+      }
+    } catch (error) {
+      res.status(404);
+      throw new Error(error);
+    }
+  })
+);
+
+// POST Register New Student
+// PATH api/students/:schoolId/students
+// PRIVATE
+router.post(
+  "/:schoolId/students",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    // res.json({ message: "I see you, bro." });
+
+    if (schoolId !== req.schoolId) {
+      res.status(401);
+      throw new Error("Not authorized to access this page");
+    }
+
+    const school = await School.findById(schoolId);
+
+    if (!school) {
+      res.status(400);
+      throw new Error("School not found");
+    }
+    const response = await School.updateOne(
+      { _id: schoolId },
+      { $set: { students: data } }
+    );
+
+    res.status(200).send(response);
   })
 );
 

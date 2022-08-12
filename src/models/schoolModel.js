@@ -53,101 +53,19 @@ const schoolSchema = new Schema(
       type: String,
       required: [true, "Please select standard currency"],
     },
-    students: [
-      {
-        name: {
-          type: String,
-          required: [true, "Please input name"],
-        },
-        age: {
-          type: Number,
-          required: [true, "Please input age"],
-        },
-        class: {
-          type: String,
-          required: [true, "Please input age"],
-        },
-        height: {
-          type: String,
-          required: [true, "Please input height"],
-        },
-        weight: {
-          type: String,
-          required: [true, "Please input height"],
-        },
-        avatar: {
-          type: String,
-          required: [true, "Please upload photo"],
-        },
-        feesStatus: {
-          type: String,
-        },
-        nationality: {
-          type: String,
-          required: [true, "Please input nationality"],
-        },
-      },
-    ],
-    staffs: [
-      {
-        name: {
-          type: String,
-          required: [true, "Please input name"],
-        },
-        age: {
-          type: Number,
-          required: [true, "Please input age"],
-        },
-        typeOfStaff: {
-          type: String,
-          required: [true, "Please specify staff's role"],
-        },
-        office: {
-          type: String,
-          required: [true, "Please input staff,s office"],
-        },
-        height: {
-          type: String,
-          required: [true, "Please input height"],
-        },
-        weight: {
-          type: String,
-          required: [true, "Please input height"],
-        },
-        avatar: {
-          type: String,
-          required: [true, "Please upload photo"],
-        },
-        salary: {
-          type: Number,
-          required: [true, "Please input salary amount"],
-        },
-        nationality: {
-          type: String,
-          required: [true, "Please input nationality"],
-        },
-      },
-    ],
+    students: [],
+    staffs: [],
   },
   {
     timestamps: true,
   }
 );
 
-// schoolSchema.pre("save", async function (next) {
-//   const salt = await bcrypt.genSalt();
-//   this.password = await bcrypt.hash(this.password, salt);
-//   next();
-// });
-// schoolSchema.pre("updateOne", async function (next) {
-//   const docToUpdate = await this.model.findOne(this.getQuery());
-//   console.log(docToUpdate);
-//   next();
-// });
-// schoolSchema.post("updateOne", async function (result, next) {
-//   console.log(result.getChanges);
-//   next();
-// });
+schoolSchema.pre("save", async function (next) {
+  const salt = await bcrypt.genSalt();
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
 
 const School = mongoose.model("School", schoolSchema);
 module.exports = { School, schoolSchema };
