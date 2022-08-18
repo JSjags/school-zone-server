@@ -175,7 +175,6 @@ router.put(
     }
   })
 );
-<<<<<<< HEAD
 // PUT Update Student Data
 // PATH api/students/:schoolId/students/update
 // PRIVATE
@@ -230,8 +229,6 @@ router.put(
     res.status(200).send(response);
   })
 );
-=======
->>>>>>> e78d3a831c48de5c48a7a05bf101a4caa904a6c3
 
 //------- POST REQUESTS -------//
 
@@ -354,11 +351,6 @@ router.post(
     const schoolId = req.params.schoolId;
     const data = req.body;
 
-<<<<<<< HEAD
-=======
-    // res.json({ message: "I see you, bro." });
-
->>>>>>> e78d3a831c48de5c48a7a05bf101a4caa904a6c3
     if (schoolId !== req.schoolId) {
       res.status(401);
       throw new Error("Not authorized to access this page");
