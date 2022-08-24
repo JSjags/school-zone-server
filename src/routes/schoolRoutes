@@ -151,30 +151,53 @@ router.put(
   "/:schoolId/update",
   protect,
   asyncHandler(async (req, res) => {
+    // if templates is undefined, add new templates field to School Schema and create templates field in already existing document.
     try {
-      const school = await School.findById(req.schoolId);
-      if (!school.templates?.[req.body.templateName]) {
-        schoolSchema.add({ templates: "object" });
+      const school = await School.findById(req.schoolId).lean();
+
+      if (!school.templates) {
+        schoolSchema.add({ templates: Object });
         const response = await School.updateOne(
           { _id: req.schoolId },
-          { templates: { [req.body.templateName]: req.body.templateData } },
-          { upsert: true }
+          {
+            $set: {
+              templates: { [req.body.templateName]: req.body.templateData },
+            },
+          },
+          { new: true, upsert: true }
         );
         return res.status(200).json({ message: "successful", response });
       }
 
+      // if templates exists, create template update object with pending template set it to already existing document.
+      const templatesUpdate = {
+        ...school.templates,
+        [req.body.templateName]: req.body.templateData,
+      };
+      schoolSchema.add({ templates: Object });
       const response = await School.updateOne(
         { _id: req.schoolId },
-        { templates: { [req.body.templateName]: req.body.templateData } },
-        { upsert: true }
+        {
+          $set: {
+            templates: {
+              ...templatesUpdate,
+            },
+          },
+        }
       );
-      return res.status(200).json({ message: "successful", response });
+      return res.status(200).json({
+        message: "successful",
+        response,
+      });
     } catch (error) {
       res.status(400);
-      throw new Error("It's from here" + error);
+      throw new Error(
+        "Sorry could not create template at this mmoment , please try again later."
+      );
     }
   })
 );
+
 // PUT Update Student Data
 // PATH api/students/:schoolId/students/update
 // PRIVATE
@@ -224,6 +247,60 @@ router.put(
     const response = await School.updateOne(
       { _id: schoolId },
       { $set: { students: studentsUpdate } }
+    );
+
+    res.status(200).send(response);
+  })
+);
+
+// PUT Update Staff Data
+// PATH api/students/:schoolId/staffs/update
+// PRIVATE
+router.put(
+  "/:schoolId/staffs/update",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const { type, data } = req.body;
+
+    if (schoolId !== req.schoolId) {
+      res.status(401);
+      throw new Error("Not authorized to access this page");
+    }
+
+    const school = await School.findById(schoolId);
+
+    if (!school) {
+      res.status(400);
+      throw new Error("School not found");
+    }
+
+    const staffsUpdate = school.staffs;
+
+    if (type === "save") {
+      staffsUpdate.forEach((staff, index, arr) => {
+        if (staff.staff_id === data.staff_id) {
+          arr[index] = data;
+        }
+        return;
+      });
+    }
+
+    if (type === "delete") {
+      let index;
+
+      data.forEach((staff) => {
+        staffsUpdate.forEach((person, index, arr) => {
+          if (person.staff_id === staff.staff_id) {
+            arr.splice(index, 1);
+          }
+        });
+      });
+    }
+
+    const response = await School.updateOne(
+      { _id: schoolId },
+      { $set: { staffs: staffsUpdate } }
     );
 
     res.status(200).send(response);
@@ -342,7 +419,7 @@ router.post(
 );
 
 // POST Register New Student
-// PATH api/students/:schoolId/students
+// PATH api/schools/:schoolId/students
 // PRIVATE
 router.post(
   "/:schoolId/students",
@@ -368,6 +445,95 @@ router.post(
     );
 
     res.status(200).send(response);
+  })
+);
+
+// POST Register New Staff
+// PATH api/schools/:schoolId/staffs
+// PRIVATE
+router.post(
+  "/:schoolId/staffs",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    if (schoolId !== req.schoolId) {
+      res.status(401);
+      throw new Error("Not authorized to access this page");
+    }
+
+    const school = await School.findById(schoolId);
+
+    if (!school) {
+      res.status(400);
+      throw new Error("School not found");
+    }
+    const response = await School.updateOne(
+      { _id: schoolId },
+      { $set: { staffs: data } }
+    );
+
+    res.status(200).send(response);
+  })
+);
+// POST Record New Finance
+// PATH api/schools/:schoolId/staffs
+// PRIVATE
+router.post(
+  "/:schoolId/finance",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+      console.log(school);
+
+      // If finance field does not exists
+      if (school.finance === undefined) {
+        try {
+          schoolSchema.add({ finance: Array });
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { finance: [data] } },
+            { new: true, upsert: true }
+          );
+          return res.status(200).json({ message: "success", data: response });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create finance field.");
+        }
+      }
+
+      // If finance field already exists
+      const financeUpdate = [data, ...school.finance];
+      schoolSchema.add({ finance: Array });
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { finance: [...financeUpdate] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated finance field",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update finance field.");
+    }
   })
 );
 
