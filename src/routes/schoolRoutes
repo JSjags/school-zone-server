@@ -307,6 +307,76 @@ router.put(
   })
 );
 
+// PUT Update Finance Record
+// PATH /api/schools/:schoolId/finance
+// PRIVATE
+router.put(
+  "/:schoolId/finance",
+  protect,
+  asyncHandler(async (req, res) => {
+    const update = req.body;
+
+    try {
+      const school = await School.findById(req.schoolId).lean();
+
+      const finance = school.finance;
+
+      const updatedItems = finance.map((fin) => {
+        if (fin.statement_id !== update.statement_id) return fin;
+        return { ...fin, ...update };
+      });
+
+      schoolSchema.add({ finance: Array });
+      const response = await School.updateOne(
+        { _id: req.schoolId },
+        { $set: { finance: [...updatedItems] } },
+        { upsert: true }
+      );
+
+      return res.status(200).json({ message: "success", data: response });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Unable to update finance records");
+    }
+  })
+);
+
+// PUT Remove Single Finance Record
+// PATH api/schools/:schoolId/finance/remove
+// PRIVATE
+
+router.put(
+  "/:schoolId/finance/remove",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { financeStatementId } = req.body;
+
+    try {
+      const school = await School.findById(req.schoolId).lean();
+      const finance = school.finance;
+
+      const newFinance = finance.filter(
+        (item) => item.statement_id !== financeStatementId
+      );
+
+      schoolSchema.add({ finance: Array });
+      const response = await School.updateOne(
+        { _id: req.schoolId },
+        { $set: { finance: [...newFinance] } }
+      );
+
+      if (!response) throw new Error("Doc not found in server");
+
+      res.status(200).json({ message: "successful", data: response });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
 //------- POST REQUESTS -------//
 
 // POST Create New School
@@ -499,7 +569,6 @@ router.post(
         res.status(400);
         throw new Error("School not found");
       }
-      console.log(school);
 
       // If finance field does not exists
       if (school.finance === undefined) {
