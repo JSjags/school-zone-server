@@ -7,6 +7,7 @@ const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
 const { response } = require("express");
+const { parse } = require("dotenv");
 
 const router = express.Router();
 
@@ -38,6 +39,30 @@ router.get(
   })
 );
 
+// GET Single School
+// PATH /api/schools/info
+// PRIVATE
+router.get(
+  "/settings",
+  protect,
+  asyncHandler(async (req, res) => {
+    if (!req.schoolId) {
+      res.status(401);
+
+      throw new Error("User not authorized");
+    }
+    try {
+      const schoolInfo = await School.findById(req.schoolId).lean();
+      const { settings } = schoolInfo;
+      res.status(200).json({ message: "success", data: settings });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Can't update settings!");
+    }
+  })
+);
+
 // GET Single School Students
 // PATH /api/schools/:id/students
 // PRIVATE
@@ -62,6 +87,41 @@ router.get(
       res.status(400);
 
       throw new Error("Oops, We encountered an error!!!");
+    }
+  })
+);
+// GET Single School Schedules
+// PATH /api/schools/:schoolId/schedules
+// PRIVATE
+router.get(
+  "/:schoolId/schedules",
+  protect,
+  asyncHandler(async (req, res) => {
+    let school;
+    const schoolId = req.params.schoolId;
+
+    try {
+      school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, School not found!!!");
+      }
+
+      const schoolSchedules = school.schedules;
+
+      if (!schoolSchedules) {
+        res.status(400);
+
+        throw new Error("Oops, No schedules were found");
+      }
+
+      res.status(200).json({ data: schoolSchedules });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
     }
   })
 );
@@ -377,6 +437,189 @@ router.put(
   })
 );
 
+// PUT Update School Settings
+// PATH /api/schools/:schoolId/settings
+// PRIVATE
+router.put(
+  "/:schoolId/settings",
+  protect,
+  asyncHandler(async (req, res) => {
+    const settingsUpdate = req.body;
+
+    try {
+      const { settings } = await School.findById(req.schoolId).lean();
+
+      if (!settings) {
+        schoolSchema.add({ settings: Object });
+        const response = await School.findByIdAndUpdate(
+          { _id: req.schoolId },
+          { $set: { settings: { ...settingsUpdate } } }
+        );
+        return res.status(200).json({
+          message: "successful",
+          data: JSON.parse(JSON.stringify(response)).settings,
+        });
+      }
+
+      schoolSchema.add({ settings: Object });
+      const response = await School.findByIdAndUpdate(
+        { _id: req.schoolId },
+        { $set: { settings: { ...settingsUpdate } } }
+      );
+      return res.status(200).json({
+        message: "successful",
+        data: JSON.parse(JSON.stringify(response)).settings,
+      });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
+// PUT Manage School Slug
+// PATH /api/schools/:schoolId/schoolslug
+// PRIVATE
+router.put(
+  "/:schoolId/schoolslug",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { type, schoolSlug } = req.body;
+
+    try {
+      const school = await School.findById(req.schoolId).lean();
+      const settings = school.settings;
+
+      // Create school slug
+      if (type === "create") {
+        if (!school.schoolSlug) {
+          schoolSchema.add({ schoolSlug: String });
+          schoolSchema.add({ settings: Object });
+
+          const response = await School.updateOne(
+            { _id: req.schoolId },
+            {
+              $set: {
+                schoolSlug,
+                settings: {
+                  ...settings,
+                  schoolSlug: true,
+                },
+              },
+            }
+          );
+          return res.status(200).json({
+            message: "successful",
+            data: response,
+          });
+        }
+
+        schoolSchema.add({ schoolSlug: String });
+        schoolSchema.add({ settings: Object });
+
+        const response = await School.updateOne(
+          { _id: req.schoolId },
+          {
+            $set: {
+              schoolSlug,
+              settings: {
+                ...settings,
+                schoolSlug: true,
+              },
+            },
+          }
+        );
+        return res.status(200).json({
+          message: "successful",
+          data: response,
+        });
+      }
+
+      // Delete school slug
+      if (type === "delete") {
+        const school = await School.findById(req.schoolId).lean();
+        const settings = school.settings;
+
+        if (!school.schoolSlug) {
+          res.status(400);
+          throw new Error("No school slug found");
+        }
+
+        schoolSchema.add({ schoolSlug: String });
+        schoolSchema.add({ settings: Object });
+        const response = await School.updateOne(
+          { _id: req.schoolId },
+          {
+            $unset: { schoolSlug },
+            $set: {
+              settings: {
+                ...settings,
+                schoolSlug: false,
+              },
+            },
+          }
+        );
+        return res.status(200).json({
+          message: "successful",
+          data: response,
+        });
+      }
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
+// PUT Update Schedule
+// PATH /api/schools/:schoolId/schedules
+// PRIVATE
+router.put(
+  "/:schoolId/schedules/:scheduleId",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { schoolId, scheduleId } = req.params;
+    const update = req.body;
+
+    try {
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, school not found!");
+      }
+
+      const schedules = school.schedules;
+      const newSchedules = schedules.map((schedule, index, arr) => {
+        if (parseInt(schedule.ID) === parseInt(scheduleId)) {
+          return (schedule = update);
+        }
+        return schedule;
+      });
+
+      schoolSchema.add({ schedules: Array });
+
+      const resp = await School.updateOne(
+        { _id: schoolId },
+        { $set: { schedules: [...newSchedules] } }
+      );
+
+      if (!resp) {
+        res.status(400);
+
+        throw new Error("Could not update schedule, please try again later");
+      }
+      res.status(200).json({ message: "Success", data: resp });
+    } catch (error) {
+      res.status(400);
+      throw new Error(error);
+    }
+  })
+);
+
 //------- POST REQUESTS -------//
 
 // POST Create New School
@@ -547,8 +790,9 @@ router.post(
     res.status(200).send(response);
   })
 );
+
 // POST Record New Finance
-// PATH api/schools/:schoolId/staffs
+// PATH api/schools/:schoolId/finance
 // PRIVATE
 router.post(
   "/:schoolId/finance",
@@ -602,6 +846,168 @@ router.post(
     } catch (error) {
       res.status(400);
       throw new Error("Unable to update finance field.");
+    }
+  })
+);
+// POST Create School Slug
+// PATH api/schools/slugs
+// PRIVATE
+router.post(
+  "/slugs",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+
+      // If finance field does not exists
+      if (school.finance === undefined) {
+        try {
+          schoolSchema.add({ finance: Array });
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { finance: [data] } },
+            { new: true, upsert: true }
+          );
+          return res.status(200).json({ message: "success", data: response });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create finance field.");
+        }
+      }
+
+      // If finance field already exists
+      const financeUpdate = [data, ...school.finance];
+      schoolSchema.add({ finance: Array });
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { finance: [...financeUpdate] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated finance field",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update finance field.");
+    }
+  })
+);
+
+// POST Save Schedule
+// PATH api/schools/:schoolId/schedules
+// PRIVATE
+router.post(
+  "/:schoolId/schedules",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+
+      // If schedules field does not exists
+      if (school.schedules === undefined) {
+        try {
+          schoolSchema.add({ schedules: Array });
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { schedules: [data] } },
+            { new: true, upsert: true }
+          );
+          return res.status(200).json({ message: "success", data: response });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create schedules field.");
+        }
+      }
+
+      // If schedules field already exists
+      const schedulesUpdate = [data, ...school.schedules];
+      schoolSchema.add({ schedules: Array });
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { schedules: [...schedulesUpdate] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated schedules field",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update schedules field.");
+    }
+  })
+);
+
+//------- DELETE REQUESTS -------//
+
+// DELETE School Schedule
+// PATH api/schools/:schoolId/schedules
+// PRIVATE
+router.delete(
+  "/:schoolId/schedules/:scheduleId",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { schoolId, scheduleId } = req.params;
+
+    try {
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, school not found!");
+      }
+
+      const schedules = school.schedules;
+      const newSchedules = schedules.filter(
+        (schedule) => parseInt(schedule.ID) !== parseInt(scheduleId)
+      );
+
+      schoolSchema.add({ schedules: Array });
+
+      const resp = await School.updateOne(
+        { _id: schoolId },
+        { $set: { schedules: [...newSchedules] } }
+      );
+
+      if (!resp) {
+        res.status(400);
+
+        throw new Error("Could not remove schedule, please try again later");
+      }
+      res.status(200).json({ message: "Success", data: resp });
+    } catch (error) {
+      res.status(400);
+      throw new Error(error);
     }
   })
 );
