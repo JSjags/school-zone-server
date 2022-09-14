@@ -2,12 +2,13 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 
+const ChunkedUpload = require("@rstcruzo/express-chunked-file-upload");
+
 const { School, schoolSchema } = require("../models/schoolModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
-const { response } = require("express");
-const { parse } = require("dotenv");
+const { default: axios } = require("axios");
 
 const router = express.Router();
 
@@ -35,6 +36,135 @@ router.get(
       res.status(400);
 
       throw new Error("Error fetching data");
+    }
+  })
+);
+
+//  GET Single School Posts
+// PATH /api/schools/posts
+// PRIVATE
+router.get(
+  "/posts",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { page: pageNumber, query, sort } = req.query;
+
+    let totalArticles, totalPages, nextPage, previousPage, results;
+
+    const sortArticles = (array) => {
+      if (sort.trim() === "Date(desc)") {
+        return array;
+      }
+
+      if (sort.trim() === "Date(asc)") {
+        return array.sort(
+          (a, b) =>
+            new Date(a.articleDetails.timeStamp).getTime() -
+            new Date(b.articleDetails.timeStamp).getTime()
+        );
+      }
+
+      if (sort.trim() === "Title(desc)") {
+        return array.sort((a, b) =>
+          a.articleDetails.title > b.articleDetails.title ? -1 : 1
+        );
+      }
+      if (sort.trim() === "Title(asc)") {
+        return array.sort((a, b) =>
+          a.articleDetails.title > b.articleDetails.title ? 1 : -1
+        );
+      }
+    };
+
+    if (!req.schoolId) {
+      res.status(401);
+
+      throw new Error("User not authorized");
+    }
+    try {
+      const schoolInfo = await School.findById(req.schoolId)
+        .select("-password")
+        .lean();
+
+      const sortedArticles = sortArticles(schoolInfo.articles);
+
+      totalArticles = sortedArticles.length;
+      totalPages = Math.ceil(
+        sortedArticles.length / schoolInfo.settings.paginationResults
+      );
+      nextPage = pageNumber + 1 <= totalPages ? pageNumber : null;
+      previousPage = pageNumber - 1 < 1 ? null : pageNumber - 1;
+      results = [];
+
+      if (!query) {
+        for (
+          i =
+            pageNumber < 2
+              ? 0
+              : (pageNumber - 1) * schoolInfo.settings.paginationResults;
+          i < pageNumber * schoolInfo.settings.paginationResults;
+          i++
+        ) {
+          if (!sortedArticles[i]) break;
+          results.push(schoolInfo.articles[i]);
+        }
+      }
+      if (query) {
+        const regExp = new RegExp(query, "gi");
+
+        let stringsArr = sortedArticles.map(
+          (article) => article.articleDetails
+        );
+        stringsArr.forEach((art, i, arr) => {
+          arr[i] = Object.values(art)
+            .filter((str) => !str.startsWith("https://firebasestorage"))
+            .join("");
+        });
+
+        const matchedResults = stringsArr.filter((str) => str.match(regExp));
+
+        for (
+          i =
+            pageNumber < 2
+              ? 0
+              : (pageNumber - 1) * schoolInfo.settings.paginationResults;
+          i < pageNumber * schoolInfo.settings.paginationResults;
+          i++
+        ) {
+          if (!stringsArr[i]) break;
+          stringsArr[i].match(regExp) && results.push(sortedArticles[i]);
+        }
+
+        totalArticles = matchedResults.length;
+        totalPages = Math.ceil(
+          matchedResults.length / schoolInfo.settings.paginationResults
+        );
+        nextPage = pageNumber + 1 <= totalPages ? pageNumber : null;
+        previousPage = pageNumber - 1 < 1 ? null : pageNumber - 1;
+      }
+
+      const data = {
+        name: schoolInfo.name,
+        email: schoolInfo.email,
+        backdrop_image: schoolInfo.backdrop_image,
+        avatar_image: schoolInfo.avatar_image,
+        posts: {
+          results,
+          nextPage,
+          previousPage,
+          totalArticles,
+          totalPages,
+          query,
+          sort,
+        },
+        settings: schoolInfo.settings,
+      };
+
+      res.status(200).json(data);
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
     }
   })
 );
@@ -229,7 +359,7 @@ router.put(
         return res.status(200).json({ message: "successful", response });
       }
 
-      // if templates exists, create template update object with pending template set it to already existing document.
+      // if templates exists, create template update object with pending template and set it to already existing document.
       const templatesUpdate = {
         ...school.templates,
         [req.body.templateName]: req.body.templateData,
@@ -595,7 +725,7 @@ router.put(
       const schedules = school.schedules;
       const newSchedules = schedules.map((schedule, index, arr) => {
         if (parseInt(schedule.ID) === parseInt(scheduleId)) {
-          return (schedule = update);
+          return update;
         }
         return schedule;
       });
@@ -849,6 +979,7 @@ router.post(
     }
   })
 );
+
 // POST Create School Slug
 // PATH api/schools/slugs
 // PRIVATE
@@ -963,6 +1094,207 @@ router.post(
     } catch (error) {
       res.status(400);
       throw new Error("Unable to update schedules field.");
+    }
+  })
+);
+// POST School Article
+// PATH api/schools/:schoolId/articles
+// PRIVATE
+router.post(
+  "/:schoolId/articles/:articleId",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const articleId = req.params.articleId;
+    const { articleURL, articleDetails } = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+
+      // If articles field does not exists
+      if (school.articles === undefined) {
+        try {
+          schoolSchema.add({ articles: Array });
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { articles: [{ articleId, articleURL, articleDetails }] } },
+            { new: true, upsert: true }
+          );
+          const firebaseReq = await axios({
+            url: articleURL,
+            method: "GET",
+          });
+          return res.status(200).json({
+            message: "success",
+            data: response,
+            article: firebaseReq.data,
+          });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create articles field.");
+        }
+      }
+
+      // If schedules field already exists
+      const articlesUpdate = [
+        { articleId, articleURL, articleDetails },
+        ...school.articles,
+      ];
+      schoolSchema.add({ articles: Array });
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { articles: [...articlesUpdate] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated articles field",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update articles field.");
+    }
+  })
+);
+
+// POST Create New Kanban Item
+// PATH api/schools/:schoolId/kanban
+// PRIVATE
+router.post(
+  "/:schoolId/kanban",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const data = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+
+      // If kanban field does not exists
+      if (school.kanban === undefined) {
+        try {
+          schoolSchema.add({ kanban: Array });
+          schoolSchema.add({ kanbanListOrder: Array });
+
+          const listOrder = [
+            "Not Started",
+            "Need Assistance",
+            "In Progress",
+            "Deferred",
+            "Completed",
+          ];
+
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { kanban: [data], kanbanListOrder: [...listOrder] } },
+            { new: true, upsert: true }
+          );
+          return res.status(200).json({ message: "success", data: response });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create kanban field.");
+        }
+      }
+
+      // If kanban field already exists
+      const kanbanUpdate = [data, ...school.kanban];
+      schoolSchema.add({ kanban: Array });
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { kanban: [...kanbanUpdate] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated kanban field",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update kanban field.");
+    }
+  })
+);
+
+// POST Update Kanban Data
+// PATH api/schools/:schoolId/kanban/update
+// PRIVATE
+router.post(
+  "/:schoolId/kanban/update",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.params.schoolId;
+    const { tasks, listOrder } = req.body;
+
+    try {
+      if (schoolId !== req.schoolId) {
+        res.status(401);
+        throw new Error("Not authorized to access this page");
+      }
+
+      const school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+        throw new Error("School not found");
+      }
+
+      // If kanban list order does not exists
+      if (school.kanbanListOrder === undefined) {
+        try {
+          schoolSchema.add({ kanbanListOrder: Array });
+          const response = await School.updateOne(
+            { _id: schoolId },
+            { $set: { kanbanListOrder: [...listOrder] } },
+            { new: true, upsert: true }
+          );
+          return res.status(200).json({ message: "success", data: response });
+        } catch (error) {
+          res.status(400);
+          throw new Error("Unable to create kanban list order.");
+        }
+      }
+
+      console.log(tasks, listOrder);
+
+      // If kanban list order already exists and update kanban board tasks
+      schoolSchema.add({ kanban: Array });
+      schoolSchema.add({ kanbanListOrder: Array });
+
+      const response = await School.updateOne(
+        { _id: schoolId },
+        { $set: { kanbanListOrder: [...listOrder], kanban: [...tasks] } },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        message: "Successfully updated kanban list order",
+        data: response,
+      });
+    } catch (error) {
+      res.status(400);
+      throw new Error("Unable to update kanban list order field.");
     }
   })
 );
