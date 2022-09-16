@@ -86,6 +86,15 @@ router.get(
         .select("-password")
         .lean();
 
+      if (!schoolInfo.articles) {
+        res.status(200).json({
+          results: [],
+          email: schoolInfo.email,
+          backdrop_image: schoolInfo.backdrop_image,
+          avatar_image: schoolInfo.avatar_image,
+        });
+      }
+
       const sortedArticles = sortArticles(schoolInfo.articles);
 
       totalArticles = sortedArticles.length;
@@ -248,6 +257,132 @@ router.get(
       }
 
       res.status(200).json({ data: schoolSchedules });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
+// GET Single School Article
+// PATH /api/schools/:schoolId/:articleId
+// PRIVATE
+router.get(
+  "/:schoolId/articles/:articleId",
+  protect,
+  asyncHandler(async (req, res) => {
+    let school;
+    const { schoolId, articleId } = req.params;
+
+    try {
+      school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, School not found!!!");
+      }
+
+      const schoolArticles = school.articles;
+
+      if (!schoolArticles) {
+        res.status(400);
+
+        throw new Error("Oops, No articles were found");
+      }
+
+      const articleLocation = schoolArticles.filter(
+        (a) => a.articleId === articleId
+      )[0]["articleURL"];
+
+      if (!articleLocation) {
+        res.status(404);
+
+        throw new Error("Oops, article not found");
+      }
+
+      try {
+        const articleBlob = await axios({
+          url: articleLocation,
+          method: "GET",
+        });
+        const article = await articleBlob.data;
+
+        if (articleBlob.status !== 200 && articleBlob.statusCode !== "OK") {
+          res.status(404);
+
+          throw new Error("Article not found");
+        }
+        res.status(200).json({ article });
+      } catch (error) {
+        res.status(400);
+        throw new Error(error);
+      }
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+// GET Single School Article
+// PATH /api/schools/:schoolId/edit/:articleId
+// PRIVATE
+router.get(
+  "/:schoolId/articles/edit/:articleId",
+  protect,
+  asyncHandler(async (req, res) => {
+    let school;
+    const { schoolId, articleId } = req.params;
+
+    try {
+      school = await School.findById(schoolId).lean();
+
+      if (!school) {
+        res.status(400);
+
+        throw new Error("Oops, School not found!!!");
+      }
+
+      const schoolArticles = school.articles;
+
+      if (!schoolArticles) {
+        res.status(400);
+
+        throw new Error("Oops, No articles were found");
+      }
+
+      const articleDetails = schoolArticles.filter(
+        (a) => a.articleId === articleId
+      )[0].articleDetails;
+      const articleLocation = schoolArticles.filter(
+        (a) => a.articleId === articleId
+      )[0]["articleURL"];
+
+      if (!articleLocation) {
+        res.status(404);
+
+        throw new Error("Oops, article not found");
+      }
+
+      try {
+        const articleBlob = await axios({
+          url: articleLocation,
+          method: "GET",
+        });
+        const article = await articleBlob.data;
+
+        if (articleBlob.status !== 200 && articleBlob.statusCode !== "OK") {
+          res.status(404);
+
+          throw new Error("Article not found");
+        }
+        res.status(200).json({ article, articleDetails });
+      } catch (error) {
+        res.status(400);
+        throw new Error(error);
+      }
     } catch (error) {
       res.status(400);
 
@@ -535,7 +670,6 @@ router.put(
 // PUT Remove Single Finance Record
 // PATH api/schools/:schoolId/finance/remove
 // PRIVATE
-
 router.put(
   "/:schoolId/finance/remove",
   protect,
@@ -557,6 +691,45 @@ router.put(
       );
 
       if (!response) throw new Error("Doc not found in server");
+
+      res.status(200).json({ message: "successful", data: response });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
+// PUT Remove Article Record
+// PATH api/schools/:schoolId/articles/remove
+// PRIVATE
+router.put(
+  "/:schoolId/articles/remove",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { postsToDelete } = req.body;
+
+    try {
+      const school = await School.findById(req.schoolId).lean();
+      const articles = school.articles;
+
+      const newArticlesArray = articles.filter(
+        (item) => !postsToDelete.includes(item.articleId)
+      );
+
+      schoolSchema.add({ articles: Array });
+      const response = await School.updateOne(
+        { _id: req.schoolId },
+        { $set: { articles: [...newArticlesArray] } }
+      );
+
+      if (!response)
+        throw new Error(
+          `${
+            postsToDelete.length > 1 ? "Articles" : "Article"
+          } not found in server`
+        );
 
       res.status(200).json({ message: "successful", data: response });
     } catch (error) {
@@ -1146,10 +1319,29 @@ router.post(
       }
 
       // If schedules field already exists
-      const articlesUpdate = [
-        { articleId, articleURL, articleDetails },
-        ...school.articles,
-      ];
+      let articlesUpdate, articleIndex;
+
+      const articleExists = school.articles.filter(
+        (art, index) => art.articleId === articleId
+      );
+
+      school.articles.forEach((art, index) => {
+        if (art.articleId === articleId) articleIndex = index;
+      });
+
+      if (articleExists.length > 0) {
+        articlesUpdate = [
+          ...school.articles.slice(0, articleIndex),
+          { articleId, articleURL, articleDetails },
+          ...school.articles.slice(articleIndex + 1),
+        ];
+      } else {
+        articlesUpdate = [
+          { articleId, articleURL, articleDetails },
+          ...school.articles,
+        ];
+      }
+
       schoolSchema.add({ articles: Array });
       const response = await School.updateOne(
         { _id: schoolId },
@@ -1162,6 +1354,7 @@ router.post(
         data: response,
       });
     } catch (error) {
+      console.log(error);
       res.status(400);
       throw new Error("Unable to update articles field.");
     }
