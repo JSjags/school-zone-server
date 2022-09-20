@@ -1,10 +1,12 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
+const mongoose = require("mongoose");
 
 const ChunkedUpload = require("@rstcruzo/express-chunked-file-upload");
 
 const { School, schoolSchema } = require("../models/schoolModel");
+const { Message } = require("../models/messagesModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
 const { checkEmail, checkInputs } = require("../helpers");
@@ -36,6 +38,37 @@ router.get(
       res.status(400);
 
       throw new Error("Error fetching data");
+    }
+  })
+);
+
+// GET Single School Messages
+// PATH /api/schools/my-messages
+// PRIVATE
+router.get(
+  "/my-messages",
+  protect,
+  asyncHandler(async (req, res) => {
+    if (!req.schoolId) {
+      res.status(401);
+
+      throw new Error("User not authorized");
+    }
+    try {
+      const schoolMessages = await Message.find({
+        $or: [
+          { from: mongoose.Types.ObjectId(req.schoolId) },
+          { to: mongoose.Types.ObjectId(req.schoolId) },
+        ],
+      });
+
+      console.log(schoolMessages);
+
+      res.status(200).json({ messages: schoolMessages });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error("Error fetching messages");
     }
   })
 );
@@ -326,6 +359,7 @@ router.get(
     }
   })
 );
+
 // GET Single School Article
 // PATH /api/schools/:schoolId/edit/:articleId
 // PRIVATE
@@ -925,6 +959,37 @@ router.put(
 
 //------- POST REQUESTS -------//
 
+// POST School Names
+// PATH api/schools/
+// PRIVATE
+router.post(
+  "/",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { query } = req.body;
+
+    var regexQuery = {
+      name: new RegExp(query, "gi"),
+    };
+
+    try {
+      const response = await School.find(regexQuery);
+      console.log(response);
+
+      if (!response) {
+        res.status(400);
+        throw new Error("Don't have a response");
+      }
+
+      res.status(200).json({ data: response, isSuccess: true });
+    } catch (error) {
+      res.status(400);
+
+      throw new Error(error);
+    }
+  })
+);
+
 // POST Create New School
 // PATH /api/schools/
 // PUBLIC
@@ -1488,6 +1553,65 @@ router.post(
     } catch (error) {
       res.status(400);
       throw new Error("Unable to update kanban list order field.");
+    }
+  })
+);
+
+// POST School Names
+// PATH api/schools/messages/send
+// PRIVATE
+router.post(
+  "/messages/send",
+  protect,
+  asyncHandler(async (req, res) => {
+    const { recipient, title, message } = req.body;
+
+    if (!recipient) {
+      res.status(400);
+      throw new Error(`Recipient field cannot be empty`);
+    }
+    if (title.toString().length <= 0 || message.toString().length <= 0) {
+      res.status(400);
+      throw new Error(
+        `${
+          title.toString().length <= 0 ? "Title" : "Message"
+        } field cannot be empty`
+      );
+    }
+
+    try {
+      const senderResponse = await School.findById(recipient.id);
+
+      if (!senderResponse) {
+        res.status(400);
+        throw new Error("No recipient with name " + recipient + " found");
+      }
+
+      if (req.schoolId === senderResponse._id.toHexString()) {
+        res.status(400);
+        throw new Error("Can't send message to yourself");
+      }
+
+      const messageResponse = await Message.create({
+        recipient: recipient.name,
+        title,
+        message,
+        from: req.schoolId,
+        to: recipient.id,
+        viewed: false,
+      });
+
+      if (!messageResponse) {
+        res.status(400);
+        throw new Error("Could't send message");
+      }
+
+      res.status(200).json({ data: messageResponse, isSuccess: true });
+    } catch (error) {
+      console.log(error);
+      res.status(400);
+
+      throw new Error(error);
     }
   })
 );
