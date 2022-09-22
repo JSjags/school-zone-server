@@ -12,6 +12,15 @@ env.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// CORS Default Settings
+app.set("Access-Control-Allow-Origin", "https://schoolzoneapp.netlify.app/");
+app.set("Access-Control-Allow-Methods", "*");
+app.set(
+  "Access-Control-Allow-Headers",
+  "Origin, X-Requested-With, Content-Type, Accept"
+);
+
+// JSON Middleware
 app.use(express.json());
 
 // School Routes

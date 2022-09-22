@@ -3,8 +3,6 @@ const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 const mongoose = require("mongoose");
 
-const ChunkedUpload = require("@rstcruzo/express-chunked-file-upload");
-
 const { School, schoolSchema } = require("../models/schoolModel");
 const { Message } = require("../models/messagesModel");
 const createToken = require("../config/jwt");
