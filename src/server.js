@@ -15,9 +15,10 @@ const PORT = process.env.PORT || 5000;
 
 // CORS Default Settings
 var corsOptions = {
-  origin: "*",
+  origin: true,
   optionsSuccessStatus: 200, // For legacy browser support
   methods: "GET, PUT, POST, DELETE, OPTIONS",
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
