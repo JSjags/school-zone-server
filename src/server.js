@@ -4,6 +4,7 @@ const env = require("dotenv");
 const colors = require("colors");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
+const cors = require("cors");
 
 // importing custom middleware
 const { errorHandler } = require("./middlewares/errorHandler");
@@ -13,12 +14,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS Default Settings
-app.set("Access-Control-Allow-Origin", "https://schoolzoneapp.netlify.app/");
-app.set("Access-Control-Allow-Methods", "*");
-app.set(
-  "Access-Control-Allow-Headers",
-  "Origin, X-Requested-With, Content-Type, Accept"
-);
+var corsOptions = {
+  origin: "*",
+  optionsSuccessStatus: 200, // For legacy browser support
+  methods: "GET, PUT, POST, DELETE, OPTIONS",
+};
+
+app.use(cors(corsOptions));
 
 // JSON Middleware
 app.use(express.json());
