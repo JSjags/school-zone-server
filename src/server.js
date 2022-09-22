@@ -21,6 +21,7 @@ var corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.set("Access-Control-Allow-Headers", "Content-Type, token");
 
 // JSON Middleware
 app.use(express.json());
