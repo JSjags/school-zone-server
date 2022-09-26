@@ -7,7 +7,7 @@ const { School, schoolSchema } = require("../models/schoolModel");
 const { Message } = require("../models/messagesModel");
 const createToken = require("../config/jwt");
 const { protect } = require("../middlewares/authMiddleware");
-const { checkEmail, checkInputs } = require("../helpers");
+const { checkEmail, checkInputs, fetchSchoolDetails } = require("../helpers");
 const { default: axios } = require("axios");
 
 const router = express.Router();
@@ -419,6 +419,79 @@ router.get(
       res.status(400);
 
       throw new Error(error);
+    }
+  })
+);
+
+// GET School Messages
+// PATH /api/schools/messages
+// PRIVATE
+router.get(
+  "/messages/:type",
+  protect,
+  asyncHandler(async (req, res) => {
+    const schoolId = req.schoolId;
+    const { page } = req.query;
+    const { type } = req.params;
+
+    const { settings } = await School.findById(schoolId).lean();
+    const resultsLimit = settings.paginationResults;
+
+    if (type === "inbox") {
+      const results = [];
+      const inbox = await Message.where("to")
+        .equals(schoolId)
+        .sort({ createdAt: -1 });
+
+      try {
+        for (
+          let i = `${
+            page * parseFloat(resultsLimit) - parseFloat(resultsLimit)
+          }`;
+          i < page * parseFloat(resultsLimit);
+          i++
+        ) {
+          if (inbox[i] === undefined) break;
+          const data = await fetchSchoolDetails(inbox[i], "inbox");
+          results.push(data);
+        }
+        return res.status(200).json({ results, type, isSuccess: true });
+      } catch (error) {
+        res.status(400);
+        throw new Error(error);
+      }
+    }
+    if (type === "outbox") {
+      const results = [];
+      const outbox = await Message.where("from")
+        .equals(schoolId)
+        .sort({ createdAt: -1 });
+
+      try {
+        for (
+          let i = `${
+            page * parseFloat(resultsLimit) - parseFloat(resultsLimit)
+          }`;
+          i < page * parseFloat(resultsLimit);
+          i++
+        ) {
+          if (outbox[i] === undefined) break;
+          const data = await fetchSchoolDetails(outbox[i], "outbox");
+          results.push(data);
+        }
+        return res
+          .status(200)
+          .json({
+            results,
+            type,
+            isSuccess: true,
+            hasMore:
+              outbox.length > parseFloat(page) * parseFloat(resultsLimit),
+          });
+      } catch (error) {
+        res.status(400);
+        throw new Error(error);
+      }
     }
   })
 );

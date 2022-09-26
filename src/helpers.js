@@ -1,6 +1,9 @@
 const { School } = require("./models/schoolModel");
 const { isEmail, isMobilePhone, isStrongPassword } = require("validator");
 
+const defaultAvatarUrl =
+  "https://th.bing.com/th/id/R.49a6854a63de1e699261f3aa0b98a471?rik=xgE%2b4OUEV%2fPu8Q&riu=http%3a%2f%2fcdn.onlinewebfonts.com%2fsvg%2fimg_285684.png&ehk=cxsRbD9Z36xapVJvQBCO2RTp2HQ46Uvp%2bush1b6%2bThI%3d&risl=&pid=ImgRaw&r=0";
+
 // input checkers
 const checkSchoolName = (val) => {
   if (val.length < 5) {
@@ -127,9 +130,47 @@ const checkInputs = (object) => {
   }
 };
 
+// fetch school details
+const fetchSchoolDetails = async (obj, type) => {
+  const id = type === "inbox" ? obj.from.toHexString() : obj.to.toHexString();
+  const school = await School.findById(id);
+
+  if (type === "inbox") {
+    return {
+      name: school.name,
+      email: school.email,
+      phoneNumber: school.phoneNumber,
+      address: school.address,
+      institutionLevel: school.institutionLevel,
+      senderId: school._id,
+      avatarUrl: school.avatar_image ? school.avatar_image : defaultAvatarUrl,
+      title: obj.title,
+      message: obj.message,
+      messageId: obj._id,
+      time: obj.createdAt,
+    };
+  }
+  if (type === "outbox") {
+    return {
+      name: school.name,
+      email: school.email,
+      phoneNumber: school.phoneNumber,
+      address: school.address,
+      institutionLevel: school.institutionLevel,
+      senderId: school._id,
+      avatarUrl: school.avatar_image ? school.avatar_image : defaultAvatarUrl,
+      title: obj.title,
+      message: obj.message,
+      messageId: obj._id,
+      time: obj.createdAt,
+    };
+  }
+};
+
 const helpers = {
   checkEmail,
   checkInputs,
+  fetchSchoolDetails,
 };
 
 module.exports = helpers;
